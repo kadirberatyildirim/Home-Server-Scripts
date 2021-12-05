@@ -11,6 +11,8 @@ from subprocess import check_output
 import smtplib, ssl, os
 from datetime import datetime
 import sqlite3
+import logging
+from configparser import ConfigParser
 
 #Decodes strings from binary to ascii
 #Input is list incase other things are later added
@@ -29,19 +31,24 @@ def get_public_ip():
     return pub_ip
 
 def send_mail(time, pub_ip):
-    #smtp requirements
-    port = 465
-    passwd = "" #----------------------------------> your password here
-    sender_email = "" #----------------------------------> your sender mail here
-    receiver_email = [''] #----------------------------------> your receiver mail here
+    #smtp requirements from info.cfg
+    parser = ConfigParser()
+    parser.read('info.cfg')
 
-    message = """ 
+    port = '{}'.format(parser.get('mail', 'port'))
+    passwd = '{}'.format(parser.get('mail', 'passwd'))
+    sender_email = '{}'.format(parser.get('mail', 'sender'))
+    receiver_email = '{}'.format(parser.get('mail', 'receiver'))
 
-        Subject: Your Subject
-        
-        Your message...
+    message = """
 
-        """ #----------------------------------> your message here
+        Subject: RP Server - Public IP Has Been Changed
+
+        Hign's server detected a change in public ip adress on datetime {}.
+
+        Current public ip : {}
+
+        """
 
     #Sending email
     context = ssl.create_default_context()
@@ -52,10 +59,10 @@ def send_mail(time, pub_ip):
 #Checks if the db exists, if not, creates db and table
 def check_db_and_connect():
     if not os.path.isfile('public_ip_logs.db'):
-        conn = sqlite3.connect('public_ip_logs.db') #----------------------------------> !!will require writing permissions!!
+        conn = sqlite3.connect('/home/ubuntu/Documents/Scripts/public_ip_checker/public_ip_logs.db')
         create_table_public_ip_logs(conn)
     else:
-        conn = sqlite3.connect('public_ip_logs.db') 
+        conn = sqlite3.connect('public_ip_logs.db')
 
     return conn
 
@@ -90,16 +97,28 @@ def insert_log(conn, values):
     conn.commit()
 
 if __name__ == '__main__':
+    #Logger
+    logging.basicConfig(level=logging.INFO, filemode='a', format="%(asctime)s — %(name)s — %(levelname)s — %(funcName)s:%(lineno)d — %(message)s", filename='pub_ip_checker.log')
+    logging.info('Public ip checker starting.')
+
     db_conn = check_db_and_connect()
 
-    pub_ip = get_public_ip()
+    try:
+        pub_ip = get_public_ip()
+    except Exception as e:
+        logging.error('Public ip could not be read || Exception: {}'.join(str(e)))
+
     time = datetime.now().strftime('%Y.%m.%d %H:%M:%S')
 
     last_logged_ip = check_last_public_ip(db_conn)
     if last_logged_ip == None:
         insert_log(db_conn, {'ip':pub_ip, 'time':time})
     elif last_logged_ip == pub_ip:
-        pass
+        logging.info('Public ip checked, has not been changed. Skipping.')
     else:
         insert_log(db_conn, {'ip':pub_ip, 'time':time})
-        send_mail(time, pub_ip)
+        try:
+            send_mail(time, pub_ip)
+            logging.info('Dynamic ip change has been detected. Mail has been sent.')
+        except Exception as e:
+            logging.error('Different ip has been detected but mail could not be sent || Exception: {}'.join(str(e)))

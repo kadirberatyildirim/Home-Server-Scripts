@@ -10,6 +10,7 @@ to connect to the internet.
 from subprocess import check_output
 import smtplib, ssl
 from datetime import datetime
+from configparser import ConfigParser
 
 def decode_str(strings):
         decoded = []
@@ -27,19 +28,31 @@ pub_ip, disk_usage, last_logins = decode_str([pub_ip, disk_usage, last_logins])
 
 time = datetime.now().strftime('%Y.%m.%d %H:%M:%S')
 
+
 #smtp requirements
-port = 465
-passwd = "" #----------------------------------> your password here
-sender_email = "" #----------------------------------> your sender mail here
-receiver_email = [''] #----------------------------------> your receiver mail here
+parser = ConfigParser()
+parser.read('info.cfg')
 
-message = """ 
+port = '{}'.format(parser.get('mail', 'port'))
+passwd = '{}'.format(parser.get('mail', 'passwd'))
+sender_email = '{}'.format(parser.get('mail', 'sender'))
+receiver_email = '{}'.format(parser.get('mail', 'receiver'))
 
-Subject: Your Subject
+message = """
 
-Your message...
+Subject: RP Server Information on Reboot
 
-""" #----------------------------------> your message here
+Hign's server has been rebooted on datetime {}.
+
+Disk Usage (/Home):
+{}
+
+Current public ip : {}
+
+Last logins of each user:
+{}
+
+"""
 
 #Sending email
 context = ssl.create_default_context()
